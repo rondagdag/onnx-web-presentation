@@ -1,0 +1,224 @@
+#!markdown
+
+# Leverage Power of Machine Learning with ONNX
+
+How to install .NET in Jupyter https://github.com/dotnet/interactive
+
+#!markdown
+
+## Instal Nuget Packages
+
+#!csharp
+
+#r "nuget:Microsoft.ML,1.4.0"
+#r "nuget:Microsoft.Data.Analysis,0.3.0"
+#r "nuget:Microsoft.ML.OnnxTransformer,1.4.0"
+#r "nuget:Microsoft.ML.OnnxConverter,0.16.0"
+#r "nuget:Microsoft.ML.OnnxRuntime,1.1.0"
+
+#!csharp
+
+using System.IO;
+using Microsoft.Data.Analysis;
+using XPlot.Plotly;
+
+#!csharp
+
+using Microsoft.AspNetCore.Html;
+Formatter<DataFrame>.Register((df, writer) =>
+{
+    var headers = new List<IHtmlContent>();
+    headers.Add(th(i("index")));
+    headers.AddRange(df.Columns.Select(c => (IHtmlContent) th(c.Name)));
+    var rows = new List<List<IHtmlContent>>();
+    var take = 20;
+    for (var i = 0; i < Math.Min(take, df.Rows.Count); i++)
+    {
+        var cells = new List<IHtmlContent>();
+        cells.Add(td(i));
+        foreach (var obj in df.Rows[i])
+        {
+            cells.Add(td(obj));
+        }
+        rows.Add(cells);
+    }
+
+    var t = table(
+        thead(
+            headers),
+        tbody(
+            rows.Select(
+                r => tr(r))));
+
+    writer.Write(t);
+}, "text/html");
+
+#!markdown
+
+## Load Data
+
+#!csharp
+
+var data = DataFrame.LoadCsv("./SalaryData.csv");
+
+#!csharp
+
+data
+
+#!csharp
+
+data.Description()
+
+#!csharp
+
+static T[] Shuffle<T>(T[] array)
+{
+    Random rand = new Random();
+    for (int i = 0; i < array.Length; i++)
+    {
+        int r = i + rand.Next(array.Length - i);
+        T temp = array[r];
+        array[r] = array[i];
+        array[i] = temp;
+    }
+    return array;
+}
+
+int[] randomIndices = Shuffle(Enumerable.Range(0, (int)data.Rows.Count).ToArray());
+int testSize = (int)(data.Rows.Count * .1);
+int[] trainRows = randomIndices[testSize..];
+int[] testRows = randomIndices[..testSize];
+
+DataFrame data_train = data[trainRows];
+DataFrame data_test = data[testRows];
+
+display(data_train.Rows.Count);
+display(data_test.Rows.Count);
+
+#!markdown
+
+## Use ML.NET
+To use ML.NET, need to create instance of MLContext.
+
+#!csharp
+
+using Microsoft.ML;
+
+#!csharp
+
+var context = new MLContext();
+
+#!markdown
+
+## Create Pipeline
+
+#!csharp
+
+var pipeline = context.Transforms.Concatenate("Features", "yearsExperience")
+                .Append(context.Regression.Trainers.Sdca(labelColumnName: "salary"));
+
+#!markdown
+
+## Training
+
+#!csharp
+
+ITransformer model = pipeline.Fit(data_train);
+
+#!markdown
+
+## Evaluate
+
+#!csharp
+
+var testResults = model.Transform(data_test);
+
+var metrics = context.Regression.Evaluate(testResults, labelColumnName: "salary", scoreColumnName: "Score");
+
+#!csharp
+
+Console.WriteLine($"*************************************************");
+Console.WriteLine($"*       Metrics for regression model      ");
+Console.WriteLine($"*------------------------------------------------");
+Console.WriteLine($"*       LossFn:        {metrics.LossFunction:0.##}");
+Console.WriteLine($"*       R2 Score:      {metrics.RSquared:0.##}");
+Console.WriteLine($"*       Absolute loss: {metrics.MeanAbsoluteError:#.##}");
+Console.WriteLine($"*       Squared loss:  {metrics.MeanSquaredError:#.##}");
+Console.WriteLine($"*       RMS loss:      {metrics.RootMeanSquaredError:#.##}");
+Console.WriteLine($"*************************************************");
+
+#!csharp
+
+private static readonly string MODEL_NAME = "model.onnx";
+
+#!markdown
+
+## Save ONNX Model
+
+#!csharp
+
+using System.IO;
+
+using (var stream = File.Create(MODEL_NAME))
+{
+    context.Model.ConvertToOnnx(model, data, stream);
+}
+
+#!markdown
+
+## Run Inferencing
+using nuget:Microsoft.ML.OnnxRuntime,1.1.0
+
+#!csharp
+
+using Microsoft.ML.OnnxRuntime;
+using Microsoft.ML.OnnxRuntime.Tensors;
+
+#!csharp
+
+private static NamedOnnxValue GetNamedOnnxValue<T>(IReadOnlyDictionary<string, NodeMetadata> inputMeta, string column, T value)
+{
+    T[] inputDataInt = new T[] { value };
+    var tensor = new DenseTensor<T>(inputDataInt, inputMeta[column].Dimensions);
+    var namedOnnxValue = NamedOnnxValue.CreateFromTensor<T>(column, tensor);
+    return namedOnnxValue;
+}
+
+#!markdown
+
+## Load ONNX Model
+
+#!csharp
+
+var session = new InferenceSession(MODEL_NAME);
+
+var inputMeta = session.InputMetadata;
+
+#!markdown
+
+## Fill in Input Data
+
+![ONNX Netron Image](onnx-netron.PNG)
+
+#!csharp
+
+var container = new List<NamedOnnxValue>();
+container.Add(GetNamedOnnxValue<float>(inputMeta, "yearsExperience", 1.1f));
+container.Add(GetNamedOnnxValue<float>(inputMeta, "salary", 0f));
+
+#!markdown
+
+## Run Inferencing
+
+#!csharp
+
+var result = session.Run(container);
+var output = result.First(x => x.Name == "Score0").AsTensor<float>().Max();
+
+Console.WriteLine($"**********************************************************************");
+Console.WriteLine($"Predicted salary: {output:0.####}, actual salary: 39343.0");
+Console.WriteLine($"**********************************************************************");
+
+#!markdown
+
+### That's all folks!
