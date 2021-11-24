@@ -48,18 +48,29 @@ function handleImage(img, targetWidth) {
 }
 
 function processImage(img, width) {
-  const canvas = document.createElement("canvas"),
-  ctx = canvas.getContext("2d");
+  const scaledImage = document.getElementById('temp-canvas');
+	const scaledCtx = scaledImage.getContext('2d');
 
   canvas.width = width;
   canvas.height = width;  
-  ctx.drawImage(img, 0, 0, width, width); //canvas.width, canvas.height);
-  
-  const data = ctx.getImageData(0, 0, width, width).data
+  scaledCtx.drawImage(img, 0, 0, width, width); //canvas.width, canvas.height);
+  var imageData = scaledCtx.getImageData(0, 0, width, width);
+  const data = imageData.data
   const greyScale = [];
+    
   for (let i = 0; i < data.length; i+= 4) {
-    greyScale.push((data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114));
-  }  
+    var gray = (((data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) - 127.5) / 127.5) * MAX_SIGNED_VALUE;
+    greyScale.push(gray);
+    data[i] = gray;
+    data[i + 1] = gray;
+    data[i + 2] = gray;
+  }
+
+  // for (let i = 0; i < data.length; i+= 4) {
+  //   //greyScale.push((data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114));
+  //   greyScale.push(data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114);
+  // }  
+  scaledCtx.putImageData(imageData, 0, 0);
   document.getElementById("canvas-image").src = canvas.toDataURL();
   return greyScale;
 }
