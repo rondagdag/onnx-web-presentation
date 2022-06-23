@@ -4,6 +4,16 @@ Click link to view
 [Presentation Material](ONNX-web-presentation.pdf)
 
 ---
+## Quick Start - Create an ONNX model using ML.NET
+
+Open notebooks folder in Visual Studio Code
+Install .NET Interactive Notebooks
+Open ExportToOnnx.ipynb - this is a C# application that trains a ML.NET model and convert to onnx.
+Click "Run All" button to see results. 
+It should generate model.onnx file
+
+
+---
 ## Quick Start - Nodejs Binding
 
 This example is a demonstration of basic usage of ONNX Runtime Node.js binding.
